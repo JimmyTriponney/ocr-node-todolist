@@ -1,0 +1,94 @@
+{% extends 'layout.html.twig' %}
+
+{% block body %}
+
+    <h1>Todolist en temps réél</h1>
+
+    <div id="todolist">
+    {% for item in todo %}
+        <div style="margin-top: 5px; position: relative; width: 40%;" class="item">
+            <strong>°</strong> <strong>{{ item.item | upper }}</strong> 
+            <div style="position: absolute;right: 0;"><span style="padding: 2px; cursor:pointer;" class="trash" data-id="{{ item.id }}">X</span></div>
+            <div>
+                <sup>Ajouté par {{ item.user }}</sup>
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+
+    <div>
+        <label for="newItem">
+            <h2>Ajouter un élément à la liste</h2>
+            <input type="text" id="newItem" name="newItem" autofocus />
+        </label>
+        <button id="addItem">
+                Ajouter
+        </button>
+    </div>
+
+{% endblock %}
+
+{% block script %}
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+            var socket = io.connect('http://localhost:8080');//Tunnel utilisé par socket
+
+            //Html d'une tâche dans la todo
+            var htmlItem = '<div style="margin-top: 5px; position: relative; width: 40%;" class="item">'
+                                +'<strong>°</strong> <strong class="itemTitle">{{ item.item | upper }}</strong>'
+                                +'<div style="position: absolute;right: 0;"><span style="padding: 2px; cursor:pointer;" class="trash" data-id="">X</span></div>'
+                                +'<div>'
+                                    +'<sup>Ajouté par <span class="itemUser"></span></sup>'
+                                +'</div>'
+                            +'</div>';
+
+            //Création du html et ajout de l'action au bouton supprimer
+            function createNewItem(user, item, id){
+                var html = $(htmlItem);//Récupération du html et conversion en objet DOM
+                html.find('.itemTitle').html( item.toUpperCase() );//Ajout du nom de la tâche
+                html.find('.itemUser').html( user );//Ajout de l'utilisateur qui l'a créé
+                html.find('.trash').attr('data-id', id);//Ajout de l'id, pour la suppression
+
+                onTrash( html.find('.trash') );//Ajout de l'action de suppression au bouton concerné
+
+                return html;//Renvoi le html pour être utilisé
+            }
+
+            //Action au clique sur le bouton supprimé
+            function onTrash(sel){
+                sel.on('click', function(){//Au clique sur supprimer
+                    var id = $(this).attr('data-id');//Récupération de l'id de la tâche
+                    socket.emit('trash',id);//Envoi au serveur de l'id de la tâche à supprimer
+                });
+            }
+
+            //Demande du nom d'utilisateur
+            var name = prompt('Quel est votre nom');
+            socket.emit('new_user', name);//Envoi du nom au serveur
+
+            //Ajout de l'action de suppression à tous les boutons de suppression existants au chargement
+            $('.trash').each( function(){
+                onTrash( $(this) );
+            });
+
+            //Quand le serveur envoi un id à supprimer, on supprime le DOM concerné côté client
+            socket.on('trash', function(id){
+                $('*[data-id='+id+']').closest('.item').remove();//Suppression du DOM
+            });
+
+            //Au clique sur "ajouter"
+            $('#addItem').click(function () {
+                var val = $('#newItem').val();
+                if( val ){//Si la value est valide, donc non vide
+                    $('#newItem').val('');//Réinitialisation du champ
+                    socket.emit('new_item', val);//Envoi de la valeur au serveur
+                }
+            });
+
+            //Quand le serveur envoi une nouvelle tâche
+            socket.on('new_item', function(data){
+                var html = createNewItem(data.user, data.item, data.id);//Création du html de celle-ci
+                $('#todolist').append(html);//Ajout du html au DOM courrant
+            });
+        </script>
+{% endblock %}
